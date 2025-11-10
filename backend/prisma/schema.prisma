@@ -1,9 +1,386 @@
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Users {
+  id            Int             @id @default(autoincrement())
+  externalId    String          @unique @default(dbgenerated("gen_random_uuid()")) @map("external_id") @db.Uuid
+  name          String
+  email         String          @unique
+  passwordHash  String          @map("password_hash")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  DailySessions DailySessions[]
+
+  @@index(fields: [externalId], name: "idx_users_external_id", type: Hash)
+  @@map("users")
+}
+
+model ServiceOrders {
+  id                Int                 @id @default(autoincrement())
+  externalId        String              @default(dbgenerated("gen_random_uuid()")) @map("external_id") @db.Uuid
+  customerId        Int                 @map("customer_id")
+  deviceModel       String              @map("device_model")
+  problem           String
+  estimatedCost     Decimal?            @map("estimated_cost") @db.Decimal(10, 2)
+  priority          ServiceOrderPriority @default(medium)
+  status            ServiceOrderStatus  @default(pending)
+  completionDate    DateTime?           @map("completion_date")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  ServiceOrdersCost ServiceOrdersCost[]
+
+  customer Customers @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index(fields: [externalId], name: "idx_service_orders_external_id", type: Hash)
+  @@index(fields: [customerId], name: "idx_service_orders_customer_id")
+  @@index(fields: [status], name: "idx_service_orders_status")
+  @@map("service_orders")
+}
+
+model Products {
+  id                Int                 @id @default(autoincrement())
+  externalId        String              @unique @default(dbgenerated("gen_random_uuid()")) @map("external_id") @db.Uuid
+  categoryId        Int                 @default(1) @map("category_id")
+  name              String
+  stockQuantity     Int                 @map("stock_quantity")
+  unitPrice         Decimal             @map("unit_price") @db.Decimal(10, 2)
+  description       String?
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  ServiceOrdersCost ServiceOrdersCost[]
+  StockMovements    StockMovements[]
+  Sales             Sales[]
+
+  category Categories? @relation(fields: [categoryId], references: [id], onDelete: SetDefault)
+
+  @@index(fields: [externalId], name: "idx_products_external_id", type: Hash)
+  @@map("products")
+}
+
+model Categories {
+  id         Int        @id @default(autoincrement())
+  externalId String     @unique @default(dbgenerated("gen_random_uuid()")) @map("external_id") @db.Uuid
+  name       String     @unique
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+  products   Products[]
+
+  @@index(fields: [externalId], name: "idx_categories_external_id", type: Hash)
+  @@map("categories")
+}
+
+model ServiceOrdersCost {
+  id             Int      @id @default(autoincrement())
+  serviceOrderId Int      @map("service_order_id")
+  productId      Int?     @map("product_id")
+  description    String
+  value          Decimal  @db.Decimal(10, 2)
+  quantity       Int
+  type           CostType
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  ServiceOrder ServiceOrders @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  Product      Products?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@map("service_orders_cost")
+}
+
+model StockMovements {
+  id            Int           @id @default(autoincrement())
+  productId     Int           @map("product_id")
+  movementType  MovementType  @map("movement_type")
+  referenceType ReferenceType @map("reference_type")
+  referenceId   Int           @map("reference_id")
+  quantity      Int
+  unitPrice     Decimal       @map("unit_price") @db.Decimal(10, 2)
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  Product Products @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("stock_movements")
+}
+
+enum ServiceOrderStatus {
+  pending
+  inProgress @map("in_progress")
+  completed
+  cancelled
+
+  @@map("service_order_status")
+}
+
+enum ServiceOrderPriority {
+  low
+  medium
+  high
+  urgent
+
+  @@map("service_order_priority")
+}
+
+enum ReferenceType {
+  serviceOrder @map("service_order")
+  purchase
+  sale
+
+  @@map("reference_type")
+}
+
+enum MovementType {
+  addition
+  removal
+
+  @@map("movement_type")
+}
+
+enum CostType {
+  stockProduct    @map("stock_product")
+  externalService @map("external_service")
+
+  @@map("cost_type")
+}
+
+model DailySessions {
+  id         Int                @id @default(autoincrement())
+  externalId String             @unique @default(dbgenerated("gen_random_uuid()")) @map("external_id") @db.Uuid
+  userId     Int                @map("user_id")
+  date       DateTime           @db.Date
+  startTime  DateTime           @map("start_time")
+  endTime    DateTime?          @map("end_time")
+  status     DailySessionStatus @default(active)
+  totalSales Decimal            @default(0) @map("total_sales") @db.Decimal(10, 2)
+  salesCount Int                @default(0) @map("sales_count")
+  notes      String?
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  user Users @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index(fields: [externalId], name: "idx_daily_sessions_external_id", type: Hash)
+  @@map("daily_sessions")
+}
+
+enum DailySessionStatus {
+  active
+  completed
+  cancelled
+
+  @@map("daily_session_status")
+}
+
+model Customers {
+  id                       Int          @id @default(autoincrement())
+  externalId               String       @unique @default(dbgenerated("gen_random_uuid()")) @map("external_id") @db.Uuid
+  name                     String
+  email                    String?      @unique
+  phone                    String?
+  cpf                      String?      @unique
+  address                  String?
+  city                     String?
+  state                    String?
+  zipCode                  String?      @map("zip_code")
+  birthDate                DateTime?    @map("birth_date") @db.Date
+  customerType             CustomerType @default(regular) @map("customer_type")
+  notes                    String?
+  totalSpent               Decimal      @default(0) @map("total_spent") @db.Decimal(10, 2)
+  totalVisits              Int          @default(0) @map("total_visits")
+  lastVisit                DateTime?    @map("last_visit")
+  averageDaysBetweenVisits Int?         @map("average_days_between_visits")
+  preferredPaymentMethod   String?      @map("preferred_payment_method")
+  createdAt                DateTime     @default(now()) @map("created_at")
+  updatedAt                DateTime     @updatedAt @map("updated_at")
+
+  Sales          Sales[]
+  CustomerVisits CustomerVisits[]
+  Contacts       Contacts[]
+  ServiceOrders  ServiceOrders[]
+
+  @@index(fields: [externalId], name: "idx_customers_external_id", type: Hash)
+  @@index(fields: [cpf], name: "idx_customers_cpf")
+  @@index(fields: [email], name: "idx_customers_email")
+  @@map("customers")
+}
+
+model Sales {
+  id            Int      @id @default(autoincrement())
+  externalId    String   @unique @default(dbgenerated("gen_random_uuid()")) @map("external_id") @db.Uuid
+  customerId    Int      @map("customer_id")
+  productId     Int      @map("product_id")
+  quantity      Int
+  unitPrice     Decimal  @map("unit_price") @db.Decimal(10, 2)
+  totalAmount   Decimal  @map("total_amount") @db.Decimal(10, 2)
+  discount      Decimal  @default(0) @db.Decimal(10, 2)
+  paymentMethod String   @map("payment_method")
+  saleDate      DateTime @map("sale_date")
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  customer Customers @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Products  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index(fields: [externalId], name: "idx_sales_external_id", type: Hash)
+  @@index(fields: [customerId], name: "idx_sales_customer_id")
+  @@index(fields: [saleDate], name: "idx_sales_date")
+  @@map("sales")
+}
+
+model CustomerVisits {
+  id         Int       @id @default(autoincrement())
+  customerId Int       @map("customer_id")
+  visitDate  DateTime  @map("visit_date")
+  visitType  VisitType @map("visit_type")
+  notes      String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  customer Customers @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index(fields: [customerId], name: "idx_customer_visits_customer_id")
+  @@index(fields: [visitDate], name: "idx_customer_visits_date")
+  @@map("customer_visits")
+}
+
+enum CustomerType {
+  vip
+  regular
+  occasional
+  new
+
+  @@map("customer_type")
+}
+
+enum VisitType {
+  purchase     @map("purchase")
+  service      @map("service")
+  consultation @map("consultation")
+  complaint    @map("complaint")
+
+  @@map("visit_type")
+}
+
+model Contacts {
+  id           Int             @id @default(autoincrement())
+  externalId   String          @unique @default(dbgenerated("gen_random_uuid()")) @map("external_id") @db.Uuid
+  name         String
+  email        String?         @unique
+  phone        String?
+  company      String?
+  position     String?
+  contactType  ContactType     @default(lead) @map("contact_type")
+  source       String? // De onde veio o contato
+  priority     ContactPriority @default(medium)
+  status       ContactStatus   @default(active)
+  notes        String?
+  tags         String[] // Tags para categorização
+  customFields Json?           @map("custom_fields") // Campos personalizados
+
+  // Informações de relacionamento
+  customerId Int?    @map("customer_id")
+  isCustomer Boolean @default(false) @map("is_customer")
+
+  // Scoring de IA
+  aiScore        Float?    @map("ai_score") // Score de 0-100 para priorização
+  aiInsights     Json?     @map("ai_insights") // Insights gerados pela IA
+  lastAiAnalysis DateTime? @map("last_ai_analysis")
+
+  // Interações
+  totalInteractions Int       @default(0) @map("total_interactions")
+  lastInteraction   DateTime? @map("last_interaction")
+  nextFollowUp      DateTime? @map("next_follow_up")
+
+  // Métricas de engajamento
+  emailOpens        Int @default(0) @map("email_opens")
+  emailClicks       Int @default(0) @map("email_clicks")
+  callDuration      Int @default(0) @map("call_duration") // em minutos
+  meetingsScheduled Int @default(0) @map("meetings_scheduled")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer            Customers?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  ContactInteractions ContactInteractions[]
+
+  @@index(fields: [externalId], name: "idx_contacts_external_id", type: Hash)
+  @@index(fields: [email], name: "idx_contacts_email")
+  @@index(fields: [contactType], name: "idx_contacts_type")
+  @@index(fields: [aiScore], name: "idx_contacts_ai_score")
+  @@index(fields: [priority], name: "idx_contacts_priority")
+  @@map("contacts")
+}
+
+model ContactInteractions {
+  id           Int             @id @default(autoincrement())
+  contactId    Int             @map("contact_id")
+  type         InteractionType
+  description  String
+  outcome      String?
+  scheduledAt  DateTime?       @map("scheduled_at")
+  completedAt  DateTime?       @map("completed_at")
+  duration     Int? // em minutos
+  notes        String?
+  attachments  String[] // URLs de arquivos
+  followUpDate DateTime?       @map("follow_up_date")
+  aiSummary    String?         @map("ai_summary") // Resumo gerado pela IA
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  contact Contacts @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index(fields: [contactId], name: "idx_contact_interactions_contact_id")
+  @@index(fields: [type], name: "idx_contact_interactions_type")
+  @@index(fields: [scheduledAt], name: "idx_contact_interactions_scheduled")
+  @@map("contact_interactions")
+}
+
+enum ContactType {
+  lead
+  prospect
+  client
+  partner
+  supplier
+
+  @@map("contact_type")
+}
+
+enum ContactPriority {
+  low
+  medium
+  high
+  urgent
+
+  @@map("contact_priority")
+}
+
+enum ContactStatus {
+  active
+  inactive
+  qualified
+  unqualified
+  converted
+  lost
+
+  @@map("contact_status")
+}
+
+enum InteractionType {
+  call      @map("call")
+  email     @map("email")
+  meeting   @map("meeting")
+  note      @map("note")
+  task      @map("task")
+  demo      @map("demo")
+  proposal  @map("proposal")
+  follow_up @map("follow_up")
+
+  @@map("interaction_type")
 }
