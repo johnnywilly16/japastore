@@ -1,0 +1,19 @@
+services:
+
+  db:
+    image: postgres:17.4
+    container_name: postgres_japa
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=stock_control
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - pgdata_estoque:/var/lib/postgresql/data
+
+volumes:
+  pgdata_estoque:
+
+
